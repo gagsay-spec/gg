@@ -3,7 +3,7 @@ import logging
 import datetime
 from typing import Dict, List
 
-from .config import (GMGN_API_KEY, GMGN_BASE_URL, CHAIN, PRICE_SURGE_5M,
+from .config import (GMGN_API_KEY, GMGN_BASE_URL, CHAINS, PRICE_SURGE_5M,
                      PRICE_DROP_5M, VOLUME_SPIKE_PERCENT, HOLDER_GROWTH_PERCENT,
                      LIQUIDITY_CHANGE_PERCENT, MIN_ALERT_SCORE, ALERT_COOLDOWN_MINUTES,
                      MAX_EMAILS_PER_RUN, SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
@@ -21,10 +21,11 @@ logger = logging.getLogger(__name__)
 
 def run_monitor():
     print("=" * 50)
-    print("GMGN MEME MONITOR")
+    print("GMGN MEME MONITOR — MULTI-CHAIN")
     print("=" * 50)
-    print(f"Chain: {CHAIN}")
+    print(f"Chains: {', '.join(CHAINS)}")
     print(f"Time: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"Min Score: {MIN_ALERT_SCORE}")
     print(f"Dry Run: {DRY_RUN}")
     print()
 
@@ -36,129 +37,156 @@ def run_monitor():
     client = GMGNClient(GMGN_API_KEY, GMGN_BASE_URL, API_TIMEOUT, API_MAX_RETRIES)
     state = load_state()
 
-    new_tokens = []
-    trending = []
-    signals = []
-    smart_money = []
+    total_new = 0
+    total_trending = 0
+    total_candidates = 0
+    total_alerts = 0
+    total_emails = 0
 
-    try:
-        logger.info("[INFO] Fetching trending tokens...")
-        trending = client.get_trending(CHAIN, "1h", 50)
-        logger.info(f"[INFO] Trending: {len(trending)} tokens")
-    except Exception as e:
-        logger.error(f"[ERROR] Failed to fetch trending: {e}")
-
-    try:
-        logger.info("[INFO] Fetching new tokens...")
-        new_tokens = client.get_new_tokens(CHAIN, 50)
-        logger.info(f"[INFO] New tokens: {len(new_tokens)}")
-    except Exception as e:
-        logger.error(f"[ERROR] Failed to fetch new tokens: {e}")
-
-    try:
-        logger.info("[INFO] Fetching signals...")
-        signals = client.get_signals(CHAIN, 50)
-        logger.info(f"[INFO] Signals: {len(signals)}")
-    except Exception as e:
-        logger.error(f"[ERROR] Failed to fetch signals: {e}")
-
-    try:
-        logger.info("[INFO] Fetching smart money...")
-        smart_money = client.get_smart_money(CHAIN, 50)
-        logger.info(f"[INFO] Smart money trades: {len(smart_money)}")
-    except Exception as e:
-        logger.error(f"[ERROR] Failed to fetch smart money: {e}")
-
-    candidates = _build_candidate_list(new_tokens, trending, signals, smart_money)
-    logger.info(f"[INFO] Candidates: {len(candidates)}")
-
-    alerts = []
-    emails_sent = 0
-
-    for token in candidates[:30]:
-        address = token.get("address")
-        if not address:
+    for chain in CHAINS:
+        chain = chain.strip()
+        if not chain:
             continue
+
+        print(f"\n{'─' * 50}")
+        print(f"  CHAIN: {chain.upper()}")
+        print(f"{'─' * 50}")
+
+        new_tokens = []
+        trending = []
+        signals = []
+        smart_money = []
 
         try:
-            prev_snapshot = get_token_snapshot(state, address)
-            token_info = client.get_token_info(CHAIN, address) or token
-
-            detections = detect_movements(token_info, prev_snapshot, {
-                "PRICE_SURGE_5M": PRICE_SURGE_5M,
-                "PRICE_DROP_5M": PRICE_DROP_5M,
-                "VOLUME_SPIKE_PERCENT": VOLUME_SPIKE_PERCENT,
-                "HOLDER_GROWTH_PERCENT": HOLDER_GROWTH_PERCENT,
-                "LIQUIDITY_CHANGE_PERCENT": LIQUIDITY_CHANGE_PERCENT
-            })
-
-            token_smart_money = [t for t in smart_money
-                                 if t.get("base_token", {}).get("address") == address]
-            sm_detection = detect_smart_money(token_info, token_smart_money, address)
-            if sm_detection:
-                detections.append(sm_detection)
-
-            token_signals = [s for s in signals
-                            if isinstance(s, dict) and s.get("token_address") == address]
-
-            score, level, score_details = calculate_score(
-                token_info, detections, token_signals,
-                {"smart_degen_count": token.get("smart_degen_count", 0)}
-            )
-
-            update_token_snapshot(state, address, token_info)
-
-            if score >= MIN_ALERT_SCORE or any(d.severity == "critical" for d in detections):
-                if not is_alert_in_cooldown(state, address, "MAIN_ALERT", ALERT_COOLDOWN_MINUTES):
-                    alerts.append({
-                        "token": token_info,
-                        "score": score,
-                        "level": level,
-                        "detections": detections
-                    })
-
+            logger.info(f"[{chain.upper()}] Fetching trending tokens...")
+            trending = client.get_trending(chain, "1h", 50)
+            logger.info(f"[{chain.upper()}] Trending: {len(trending)} tokens")
         except Exception as e:
-            logger.error(f"[ERROR] Failed to process token {address}: {e}")
-            continue
+            logger.error(f"[{chain.upper()}] Failed to fetch trending: {e}")
 
-    alerts.sort(key=lambda x: x["score"], reverse=True)
+        try:
+            logger.info(f"[{chain.upper()}] Fetching new tokens...")
+            new_tokens = client.get_new_tokens(chain, 50)
+            logger.info(f"[{chain.upper()}] New tokens: {len(new_tokens)}")
+        except Exception as e:
+            logger.error(f"[{chain.upper()}] Failed to fetch new tokens: {e}")
 
-    for alert in alerts[:MAX_EMAILS_PER_RUN]:
-        symbol = alert["token"].get("symbol", "unknown")
-        score = alert["score"]
-        level = alert["level"]
-        detections = alert["detections"]
+        try:
+            logger.info(f"[{chain.upper()}] Fetching signals...")
+            signals = client.get_signals(chain, 50)
+            logger.info(f"[{chain.upper()}] Signals: {len(signals)}")
+        except Exception as e:
+            logger.error(f"[{chain.upper()}] Failed to fetch signals: {e}")
 
-        logger.info(f"[ALERT] ${symbol} Score={score:.0f} Level={level}")
+        try:
+            logger.info(f"[{chain.upper()}] Fetching smart money...")
+            smart_money = client.get_smart_money(chain, 50)
+            logger.info(f"[{chain.upper()}] Smart money trades: {len(smart_money)}")
+        except Exception as e:
+            logger.error(f"[{chain.upper()}] Failed to fetch smart money: {e}")
 
-        gmgn_url = f"https://gmgn.ai/{CHAIN}/token/{alert['token'].get('address', '')}"
+        candidates = _build_candidate_list(new_tokens, trending, signals, smart_money)
+        logger.info(f"[{chain.upper()}] Candidates: {len(candidates)}")
 
-        success = send_alert({
-            "DRY_RUN": DRY_RUN,
-            "SMTP_HOST": SMTP_HOST,
-            "SMTP_PORT": SMTP_PORT,
-            "SMTP_USERNAME": SMTP_USERNAME,
-            "SMTP_PASSWORD": SMTP_PASSWORD,
-            "ALERT_EMAIL": ALERT_EMAIL,
-            "CHAIN": CHAIN
-        }, alert["token"], score, level, detections, gmgn_url)
+        chain_alerts = []
+        chain_emails = 0
 
-        if success:
-            emails_sent += 1
-            record_alert(state, alert["token"].get("address", ""), "MAIN_ALERT", score)
+        for token in candidates[:30]:
+            address = token.get("address")
+            if not address:
+                continue
+
+            try:
+                prev_snapshot = get_token_snapshot(state, f"{chain}:{address}")
+                token_info = client.get_token_info(chain, address) or token
+
+                detections = detect_movements(token_info, prev_snapshot, {
+                    "PRICE_SURGE_5M": PRICE_SURGE_5M,
+                    "PRICE_DROP_5M": PRICE_DROP_5M,
+                    "VOLUME_SPIKE_PERCENT": VOLUME_SPIKE_PERCENT,
+                    "HOLDER_GROWTH_PERCENT": HOLDER_GROWTH_PERCENT,
+                    "LIQUIDITY_CHANGE_PERCENT": LIQUIDITY_CHANGE_PERCENT
+                })
+
+                token_smart_money = [t for t in smart_money
+                                     if t.get("base_token", {}).get("address") == address]
+                sm_detection = detect_smart_money(token_info, token_smart_money, address)
+                if sm_detection:
+                    detections.append(sm_detection)
+
+                token_signals = [s for s in signals
+                                if isinstance(s, dict) and s.get("token_address") == address]
+
+                score, level, score_details = calculate_score(
+                    token_info, detections, token_signals,
+                    {"smart_degen_count": token.get("smart_degen_count", 0)}
+                )
+
+                update_token_snapshot(state, f"{chain}:{address}", token_info)
+
+                if score >= MIN_ALERT_SCORE or any(d.severity == "critical" for d in detections):
+                    if not is_alert_in_cooldown(state, f"{chain}:{address}", "MAIN_ALERT", ALERT_COOLDOWN_MINUTES):
+                        chain_alerts.append({
+                            "token": token_info,
+                            "score": score,
+                            "level": level,
+                            "detections": detections,
+                            "chain": chain
+                        })
+
+            except Exception as e:
+                logger.error(f"[{chain.upper()}] Failed to process token {address}: {e}")
+                continue
+
+        chain_alerts.sort(key=lambda x: x["score"], reverse=True)
+
+        for alert in chain_alerts[:MAX_EMAILS_PER_RUN]:
+            symbol = alert["token"].get("symbol", "unknown")
+            score = alert["score"]
+            level = alert["level"]
+            detections = alert["detections"]
+            chain = alert["chain"]
+
+            logger.info(f"[ALERT] [{chain.upper()}] ${symbol} Score={score:.0f} Level={level}")
+
+            gmgn_url = f"https://gmgn.ai/{chain}/token/{alert['token'].get('address', '')}"
+
+            success = send_alert({
+                "DRY_RUN": DRY_RUN,
+                "SMTP_HOST": SMTP_HOST,
+                "SMTP_PORT": SMTP_PORT,
+                "SMTP_USERNAME": SMTP_USERNAME,
+                "SMTP_PASSWORD": SMTP_PASSWORD,
+                "ALERT_EMAIL": ALERT_EMAIL,
+                "CHAIN": chain
+            }, alert["token"], score, level, detections, gmgn_url)
+
+            if success:
+                chain_emails += 1
+                record_alert(state, f"{chain}:{alert['token'].get('address', '')}", "MAIN_ALERT", score)
+
+        total_new += len(new_tokens)
+        total_trending += len(trending)
+        total_candidates += len(candidates)
+        total_alerts += len(chain_alerts)
+        total_emails += chain_emails
+
+        print(f"  [{chain.upper()}] New: {len(new_tokens)} | Trending: {len(trending)} | "
+              f"Candidates: {len(candidates)} | Alerts: {len(chain_alerts)} | Emails: {chain_emails}")
 
     cleanup_old_snapshots(state)
     save_state(state)
 
     print()
     print("=" * 50)
-    print("SUMMARY")
+    print("TOTAL SUMMARY")
     print("=" * 50)
-    print(f"New tokens: {len(new_tokens)}")
-    print(f"Trending: {len(trending)}")
-    print(f"Candidates: {len(candidates)}")
-    print(f"Alerts: {len(alerts)}")
-    print(f"Emails sent: {emails_sent}")
+    print(f"Chains: {', '.join(CHAINS)}")
+    print(f"New tokens: {total_new}")
+    print(f"Trending: {total_trending}")
+    print(f"Candidates: {total_candidates}")
+    print(f"Alerts: {total_alerts}")
+    print(f"Emails sent: {total_emails}")
     print(f"API requests: {client.request_count}")
     print("=" * 50)
 

@@ -7,8 +7,8 @@ load_dotenv()
 GMGN_API_KEY = os.getenv("GMGN_API_KEY", "")
 GMGN_BASE_URL = "https://openapi.gmgn.ai"
 
-# Chain
-CHAIN = os.getenv("CHAIN", "sol")
+# Chains to monitor (comma-separated)
+CHAINS = os.getenv("CHAINS", "sol,bsc,base,eth").split(",")
 
 # Detection thresholds
 PRICE_SURGE_5M = float(os.getenv("PRICE_SURGE_5M", "20"))
@@ -18,7 +18,7 @@ HOLDER_GROWTH_PERCENT = float(os.getenv("HOLDER_GROWTH_PERCENT", "15"))
 LIQUIDITY_CHANGE_PERCENT = float(os.getenv("LIQUIDITY_CHANGE_PERCENT", "30"))
 
 # Scoring
-MIN_ALERT_SCORE = int(os.getenv("MIN_ALERT_SCORE", "75"))
+MIN_ALERT_SCORE = int(os.getenv("MIN_ALERT_SCORE", "85"))
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "30"))
 MAX_EMAILS_PER_RUN = int(os.getenv("MAX_EMAILS_PER_RUN", "5"))
 
