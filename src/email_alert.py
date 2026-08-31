@@ -98,9 +98,15 @@ def _build_body(token_info: Dict, score: float, level: str,
         icon = icons.get(d.alert_type, "⚡")
         reasons.append(f"{icon} {d.alert_type.replace('_', ' ').title()}")
 
-    vol_str = f"${volume:,.0f}" if isinstance(volume, (int, float)) else str(volume)
-    liq_str = f"${liquidity:,.0f}" if isinstance(liquidity, (int, float)) else str(liquidity)
-    mc_str = f"${market_cap:,.0f}" if isinstance(market_cap, (int, float)) else str(market_cap)
+    def _fmt(val):
+        try:
+            return f"${float(val):,.0f}"
+        except (ValueError, TypeError):
+            return str(val)
+
+    vol_str = _fmt(volume)
+    liq_str = _fmt(liquidity)
+    mc_str = _fmt(market_cap)
 
     body = f"""GMGN MEME COIN ALERT
 {'=' * 40}

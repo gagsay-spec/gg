@@ -59,13 +59,8 @@ def calculate_score(token_info: Dict, detections: List, gmgn_signals: List = Non
     if available_weight == 0:
         return 0.0, "NORMAL", scores
 
-    raw_total = sum(
-        scores.get(k, 0) * (WEIGHTS[k] / available_weight)
-        for k in WEIGHTS if k in scores
-    )
-
-    normalized_total = (raw_total / available_weight) * 100
-    final_score = min(100, max(0, normalized_total))
+    raw_total = sum(scores.values())
+    final_score = min(100, max(0, (raw_total / available_weight) * 100))
 
     level = "NORMAL"
     for threshold, label in LEVELS:
@@ -76,10 +71,21 @@ def calculate_score(token_info: Dict, detections: List, gmgn_signals: List = Non
     return final_score, level, scores
 
 
+def _to_float(val) -> Optional[float]:
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _score_price_momentum(token_info: Dict, detections: List) -> Optional[float]:
     price_data = token_info.get("price", token_info)
-    change_5m = price_data.get("price_change_percent5m") or price_data.get("price_5m")
-    change_1h = price_data.get("price_change_percent1h") or price_data.get("price_1h")
+    if not isinstance(price_data, dict):
+        price_data = token_info
+    change_5m = _to_float(price_data.get("price_change_percent5m") or price_data.get("price_5m"))
+    change_1h = _to_float(price_data.get("price_change_percent1h") or price_data.get("price_1h"))
 
     score = 0
     if change_5m is not None:

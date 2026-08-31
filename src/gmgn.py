@@ -31,7 +31,7 @@ class GMGNClient:
                  json_body: dict = None) -> Optional[Dict[str, Any]]:
         self._wait_for_rate_limit()
 
-        timestamp = str(int(time.time() * 1000))
+        timestamp = str(int(time.time()))
         client_id = str(uuid.uuid4())
 
         if params is None:
@@ -65,7 +65,10 @@ class GMGNClient:
                     logger.error(f"[API_ERROR] {data.get('message', 'Unknown error')}")
                     return None
 
-                return data.get("data")
+                result = data.get("data")
+                if isinstance(result, dict) and result.get("code") == 0:
+                    result = result.get("data")
+                return result
 
             except requests.exceptions.Timeout:
                 logger.warning(f"[TIMEOUT] Attempt {attempt + 1}/{self.max_retries}")

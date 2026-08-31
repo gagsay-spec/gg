@@ -85,33 +85,42 @@ def detect_smart_money(token_info: Dict, smart_money_trades: List[Dict],
     return None
 
 
+def _to_float(val) -> Optional[float]:
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _calc_price_change(current: Dict, previous: Dict) -> Optional[float]:
-    curr_price = current.get("price") or current.get("price_usd")
-    prev_price = previous.get("price") or previous.get("price_usd")
+    curr_price = _to_float(current.get("price") or current.get("price_usd"))
+    prev_price = _to_float(previous.get("price") or previous.get("price_usd"))
     if curr_price and prev_price and prev_price > 0:
         return ((curr_price - prev_price) / prev_price) * 100
     return None
 
 
 def _calc_volume_change(current: Dict, previous: Dict) -> Optional[float]:
-    curr_vol = current.get("volume_5m") or current.get("volume")
-    prev_vol = previous.get("volume_5m") or previous.get("volume")
+    curr_vol = _to_float(current.get("volume_5m") or current.get("volume"))
+    prev_vol = _to_float(previous.get("volume_5m") or previous.get("volume"))
     if curr_vol and prev_vol and prev_vol > 0:
         return ((curr_vol - prev_vol) / prev_vol) * 100
     return None
 
 
 def _calc_holder_change(current: Dict, previous: Dict) -> Optional[float]:
-    curr_holders = current.get("holder_count")
-    prev_holders = previous.get("holder_count")
+    curr_holders = _to_float(current.get("holder_count"))
+    prev_holders = _to_float(previous.get("holder_count"))
     if curr_holders and prev_holders and prev_holders > 0:
         return ((curr_holders - prev_holders) / prev_holders) * 100
     return None
 
 
 def _calc_liquidity_change(current: Dict, previous: Dict) -> Optional[float]:
-    curr_liq = current.get("liquidity")
-    prev_liq = previous.get("liquidity")
+    curr_liq = _to_float(current.get("liquidity"))
+    prev_liq = _to_float(previous.get("liquidity"))
     if curr_liq and prev_liq and prev_liq > 0:
         return ((curr_liq - prev_liq) / prev_liq) * 100
     return None
