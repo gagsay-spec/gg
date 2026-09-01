@@ -83,11 +83,15 @@ class GMGNClient:
         logger.error(f"[FAILED] All {self.max_retries} attempts failed for {path}")
         return None
 
-    def get_trending(self, chain: str, interval: str = "1h", limit: int = 50) -> List[Dict]:
-        data = self._request("GET", "/v1/market/rank", params={
+    def get_trending(self, chain: str, interval: str = "1h", limit: int = 50,
+                     max_created: str = None) -> List[Dict]:
+        params = {
             "chain": chain, "interval": interval, "limit": limit,
             "order_by": "volume", "direction": "desc"
-        })
+        }
+        if max_created:
+            params["max_created"] = max_created
+        data = self._request("GET", "/v1/market/rank", params=params)
         return data.get("rank", []) if data else []
 
     def get_new_tokens(self, chain: str, limit: int = 50) -> List[Dict]:

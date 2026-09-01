@@ -3,7 +3,7 @@ import logging
 import datetime
 from typing import Dict, List
 
-from .config import (GMGN_API_KEY, GMGN_BASE_URL, CHAINS, PRICE_SURGE_5M,
+from .config import (GMGN_API_KEY, GMGN_BASE_URL, CHAINS, MAX_TOKEN_AGE_DAYS, PRICE_SURGE_5M,
                      PRICE_DROP_5M, VOLUME_SPIKE_PERCENT, HOLDER_GROWTH_PERCENT,
                      LIQUIDITY_CHANGE_PERCENT, MIN_ALERT_SCORE, ALERT_COOLDOWN_MINUTES,
                      MAX_EMAILS_PER_RUN, SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
@@ -24,6 +24,7 @@ def run_monitor():
     print("GMGN MEME MONITOR — MULTI-CHAIN")
     print("=" * 50)
     print(f"Chains: {', '.join(CHAINS)}")
+    print(f"Max Token Age: {MAX_TOKEN_AGE_DAYS} days")
     print(f"Time: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Min Score: {MIN_ALERT_SCORE}")
     print(f"Dry Run: {DRY_RUN}")
@@ -58,8 +59,10 @@ def run_monitor():
         smart_money = []
 
         try:
-            logger.info(f"[{chain.upper()}] Fetching trending tokens...")
-            trending = client.get_trending(chain, "1h", 50)
+            logger.info(f"[{chain.upper()}] Fetching trending tokens (max {MAX_TOKEN_AGE_DAYS}d old)...")
+            max_created = f"{MAX_TOKEN_AGE_DAYS}d"
+            trending = client.get_trending(chain, "1h", 50, max_created=max_created)
+            trending = [t for t in trending if _is_token_fresh(t, MAX_TOKEN_AGE_DAYS)]
             logger.info(f"[{chain.upper()}] Trending: {len(trending)} tokens")
         except Exception as e:
             logger.error(f"[{chain.upper()}] Failed to fetch trending: {e}")
@@ -217,3 +220,17 @@ def _build_candidate_list(new_tokens: List, trending: List,
                 candidates.append(signal)
 
     return candidates
+
+
+def _is_token_fresh(token: Dict, max_age_days: int) -> bool:
+    """Check if token was created within max_age_days."""
+    creation_ts = token.get("creation_timestamp") or token.get("open_timestamp")
+    if not creation_ts:
+        return False
+    try:
+        creation_ts = int(creation_ts)
+    except (ValueError, TypeError):
+        return False
+    now = int(time.time())
+    age_seconds = now - creation_ts
+    return age_seconds <= (max_age_days * 86400)

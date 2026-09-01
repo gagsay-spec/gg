@@ -10,6 +10,12 @@ GMGN_BASE_URL = "https://openapi.gmgn.ai"
 # Chains to monitor (comma-separated)
 CHAINS = os.getenv("CHAINS", "sol,bsc,base,eth").split(",")
 
+# Token age filter (max age in days, 14 = 2 weeks)
+MAX_TOKEN_AGE_DAYS = int(os.getenv("MAX_TOKEN_AGE_DAYS", "14"))
+
+# Token age filter (max age in days, 14 = 2 weeks)
+MAX_TOKEN_AGE_DAYS = int(os.getenv("MAX_TOKEN_AGE_DAYS", "14"))
+
 # Detection thresholds
 PRICE_SURGE_5M = float(os.getenv("PRICE_SURGE_5M", "20"))
 PRICE_DROP_5M = float(os.getenv("PRICE_DROP_5M", "-20"))
